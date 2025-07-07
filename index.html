@@ -2,14 +2,35 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>ConstructIQ Estimator Agent</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ConstructIQ – Estimator Agent</title>
+  <style>
+    body { font-family: sans-serif; padding: 2rem; }
+    .upload-box {
+      margin-top: 2rem;
+      border: 2px dashed #aaa;
+      padding: 1rem;
+      text-align: center;
+      border-radius: 8px;
+      max-width: 400px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .hidden { display: none; }
+    #status { margin-top: 1rem; }
+  </style>
 </head>
 <body>
   <h1>Welcome to ConstructIQ</h1>
-  <p>Interact with the EstimatorAgent below to get project estimates and insights.</p>
+  <p>Use the chatbot below or upload a blueprint to start your estimation.</p>
 
-  <!-- DigitalOcean GenAI Chatbot -->
+  <div class="upload-box">
+    <h3>Upload a Blueprint (PDF)</h3>
+    <input type="file" id="blueprintUpload" accept=".pdf" />
+    <button onclick="handleUpload()">Extract & Send to Agent</button>
+    <p id="status"></p>
+  </div>
+
+  <!-- Chatbot Widget -->
   <script async
     src="https://aqa6hys563q26rtqm6cnz6cr.agents.do-ai.run/static/chatbot/widget.js"
     data-agent-id="2e5f98d9-5abd-11f0-bf8f-4e013e2ddde4"
@@ -20,6 +41,50 @@
     data-button-background-color="#0061EB"
     data-starting-message="Hello! How can I help you today?"
     data-logo="/static/chatbot/icons/default-agent.svg">
+  </script>
+
+  <!-- PDF.js for extracting PDF content -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+  <script>
+    async function handleUpload() {
+      const file = document.getElementById('blueprintUpload').files[0];
+      const status = document.getElementById('status');
+
+      if (!file) {
+        status.textContent = 'Please select a PDF file.';
+        return;
+      }
+
+      if (file.type !== 'application/pdf') {
+        status.textContent = 'Only PDF files are supported.';
+        return;
+      }
+
+      status.textContent = 'Extracting text from PDF...';
+
+      const reader = new FileReader();
+      reader.onload = async function () {
+        const typedArray = new Uint8Array(reader.result);
+        const pdf = await pdfjsLib.getDocument({ data: typedArray }).promise;
+        let fullText = '';
+
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const textContent = await page.getTextContent();
+          const text = textContent.items.map(item => item.str).join(' ');
+          fullText += text + '\n\n';
+        }
+
+        // Send the extracted blueprint content to the agent
+        window.postMessage({
+          type: "chatbot.sendMessage",
+          payload: `Blueprint content uploaded:\n\n${fullText}`
+        }, "*");
+
+        status.textContent = 'Blueprint uploaded and sent to agent.';
+      };
+      reader.readAsArrayBuffer(file);
+    }
   </script>
 </body>
 </html>
