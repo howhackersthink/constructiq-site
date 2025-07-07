@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Blueprint OCR Upload + Chat</title>
+  <title>Blueprint OCR Upload</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.0.3/dist/tesseract.min.js"></script>
   <style>
     body { font-family: Arial, sans-serif; padding: 2em; }
     #log { white-space: pre-wrap; border: 1px solid #ccc; padding: 1em; margin-top: 1em; background: #f8f8f8; }
-    #chatTrigger { margin-top: 2em; display: none; }
+    #sendButton { margin-top: 1em; }
   </style>
 </head>
 <body>
@@ -17,10 +17,29 @@
   <input type="file" id="fileInput" accept="application/pdf" />
   <button onclick="processPDF()">Upload & Extract</button>
   <div id="log"></div>
-  <button id="chatTrigger" onclick="sendToChatbot()">Send Extracted Text to Agent Chat</button>
+  <button id="sendButton" onclick="sendToChatbot()" style="display:none;">Send Extracted Text to Agent Chat</button>
+
+  <!-- Chatbot Widget Embed -->
+  <script async
+    src="https://aqa6hys563q26rtqm6cnz6cr.agents.do-ai.run/static/chatbot/widget.js"
+    data-agent-id="2e5f98d9-5abd-11f0-bf8f-4e013e2ddde4"
+    data-chatbot-id="Vx_4krj2n7uEEBkeudlVzg425uf4lvzO"
+    data-name="EstimatorAgent Chatbot"
+    data-primary-color="#031B4E"
+    data-secondary-color="#E5E8ED"
+    data-button-background-color="#0061EB"
+    data-starting-message="Hello! How can I help you today?"
+    data-logo="/static/chatbot/icons/default-agent.svg">
+  </script>
 
   <script>
-    let extractedText = '';
+    let chatbotReady = false;
+    let latestExtractedText = '';
+
+    window.addEventListener("chatbot-ready", () => {
+      chatbotReady = true;
+      console.log("✅ Chatbot widget is ready.");
+    });
 
     async function processPDF() {
       const file = document.getElementById('fileInput').files[0];
@@ -33,7 +52,7 @@
       reader.onload = async () => {
         try {
           const pdf = await pdfjsLib.getDocument({ data: reader.result }).promise;
-          extractedText = '';
+          let fullText = '';
 
           for (let i = 1; i <= pdf.numPages; i++) {
             const page = await pdf.getPage(i);
@@ -49,12 +68,12 @@
             const { data: { text } } = await Tesseract.recognize(blob, 'eng', {
               logger: m => console.log(m)
             });
-            extractedText += `\n--- Page ${i} ---\n` + text;
+            fullText += `\n--- Page ${i} ---\n` + text;
           }
 
-          log.innerText = 'OCR Complete. You may now send it to the chatbot.';
-          document.getElementById('chatTrigger').style.display = 'inline-block';
-
+          latestExtractedText = fullText;
+          log.innerText = '✅ OCR Complete. You can now send to chat.';
+          document.getElementById('sendButton').style.display = 'inline-block';
         } catch (err) {
           console.error(err);
           log.innerText = '❌ Error: ' + err.message;
@@ -63,26 +82,14 @@
     }
 
     function sendToChatbot() {
-      const chatWidget = window.DO_CHATBOT_WIDGET;
-      if (chatWidget && typeof chatWidget.sendMessage === 'function') {
-        chatWidget.sendMessage(`Here is the blueprint text. Provide a construction cost and risk estimate:\n${extractedText}`);
-      } else {
-        alert('Chatbot widget not ready. Please refresh the page.');
+      if (!chatbotReady || !window.chatbot) {
+        alert("Chatbot widget not ready. Please refresh the page or wait a few moments.");
+        return;
       }
-    }
-  </script>
 
-  <!-- DigitalOcean Agent Chatbot Embed -->
-  <script async
-    src="https://aqa6hys563q26rtqm6cnz6cr.agents.do-ai.run/static/chatbot/widget.js"
-    data-agent-id="2e5f98d9-5abd-11f0-bf8f-4e013e2ddde4"
-    data-chatbot-id="Vx_4krj2n7uEEBkeudlVzg425uf4lvzO"
-    data-name="EstimatorAgent Chatbot"
-    data-primary-color="#031B4E"
-    data-secondary-color="#E5E8ED"
-    data-button-background-color="#0061EB"
-    data-starting-message="Hello! How can I help you today?"
-    data-logo="/static/chatbot/icons/default-agent.svg">
+      const message = `Here's a blueprint I've uploaded. Please provide a quick estimate or an advanced breakdown based on the following:\n\n${latestExtractedText}`;
+      window.chatbot.sendMessage(message);
+    }
   </script>
 </body>
 </html>
