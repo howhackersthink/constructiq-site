@@ -2,88 +2,91 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>ConstructIQ – Estimator Agent</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ConstructIQ Chatbot</title>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.0.2/dist/tesseract.min.js"></script>
   <style>
-    body { font-family: sans-serif; padding: 2rem; }
-    .upload-box {
-      margin-top: 2rem;
-      border: 2px dashed #aaa;
-      padding: 1rem;
-      text-align: center;
-      border-radius: 8px;
-      max-width: 400px;
-      margin-left: auto;
-      margin-right: auto;
+    body {
+      font-family: Arial, sans-serif;
+      padding: 2em;
+      background: #f5f5f5;
+      color: #333;
     }
-    .hidden { display: none; }
-    #status { margin-top: 1rem; }
+    #chatbot-container {
+      margin-top: 2em;
+    }
+    #status {
+      margin-top: 1em;
+      font-style: italic;
+    }
   </style>
 </head>
 <body>
   <h1>Welcome to ConstructIQ</h1>
-  <p>Use the chatbot below or upload a blueprint to start your estimation.</p>
+  <p>Upload a construction blueprint and our AI assistant will analyze it for you.</p>
 
-  <div class="upload-box">
-    <h3>Upload a Blueprint (PDF)</h3>
-    <input type="file" id="blueprintUpload" accept=".pdf" />
-    <button onclick="handleUpload()">Extract & Send to Agent</button>
-    <p id="status"></p>
+  <input type="file" id="blueprintUpload" accept="image/*" />
+  <button onclick="handleBlueprintUpload()">Upload Blueprint</button>
+  <p id="status"></p>
+
+  <div id="chatbot-container">
+    <script async
+      src="https://aqa6hys563q26rtqm6cnz6cr.agents.do-ai.run/static/chatbot/widget.js"
+      data-agent-id="2e5f98d9-5abd-11f0-bf8f-4e013e2ddde4"
+      data-chatbot-id="Vx_4krj2n7uEEBkeudlVzg425uf4lvzO"
+      data-name="EstimatorAgent Chatbot"
+      data-primary-color="#031B4E"
+      data-secondary-color="#E5E8ED"
+      data-button-background-color="#0061EB"
+      data-starting-message="Hello! How can I help you today?"
+      data-logo="/static/chatbot/icons/default-agent.svg">
+    </script>
   </div>
 
-  <!-- Chatbot Widget -->
-  <script async
-    src="https://aqa6hys563q26rtqm6cnz6cr.agents.do-ai.run/static/chatbot/widget.js"
-    data-agent-id="2e5f98d9-5abd-11f0-bf8f-4e013e2ddde4"
-    data-chatbot-id="Vx_4krj2n7uEEBkeudlVzg425uf4lvzO"
-    data-name="EstimatorAgent Chatbot"
-    data-primary-color="#031B4E"
-    data-secondary-color="#E5E8ED"
-    data-button-background-color="#0061EB"
-    data-starting-message="Hello! How can I help you today?"
-    data-logo="/static/chatbot/icons/default-agent.svg">
-  </script>
-
-  <!-- PDF.js for extracting PDF content -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
   <script>
-    async function handleUpload() {
-      const file = document.getElementById('blueprintUpload').files[0];
-      const status = document.getElementById('status');
+    async function handleBlueprintUpload() {
+      const input = document.getElementById("blueprintUpload");
+      const status = document.getElementById("status");
 
-      if (!file) {
-        status.textContent = 'Please select a PDF file.';
+      if (!input.files.length) {
+        status.innerText = "Please select a blueprint image to upload.";
         return;
       }
 
-      if (file.type !== 'application/pdf') {
-        status.textContent = 'Only PDF files are supported.';
-        return;
-      }
-
-      status.textContent = 'Extracting text from PDF...';
-
+      const file = input.files[0];
       const reader = new FileReader();
-      reader.onload = async function () {
-        const typedArray = new Uint8Array(reader.result);
-        const pdf = await pdfjsLib.getDocument({ data: typedArray }).promise;
-        let fullText = '';
 
-        for (let i = 1; i <= pdf.numPages; i++) {
-          const page = await pdf.getPage(i);
-          const textContent = await page.getTextContent();
-          const text = textContent.items.map(item => item.str).join(' ');
-          fullText += text + '\n\n';
+      reader.onload = async () => {
+        const imageData = reader.result;
+        status.innerText = "Extracting text from blueprint...";
+
+        try {
+          const { data: { text } } = await Tesseract.recognize(
+            imageData,
+            'eng',
+            {
+              logger: m => console.log(m)
+            }
+          );
+
+          console.log("Extracted Text:", text);
+          status.innerText = "Sending extracted data to agent...";
+
+          const iframe = document.querySelector("iframe");
+          if (iframe && iframe.contentWindow) {
+            const msg = `Use this blueprint to estimate the project: ${text}`;
+            iframe.contentWindow.postMessage({ type: "user_message", payload: msg }, "*");
+            status.innerText = "Blueprint text sent to agent.";
+          } else {
+            status.innerText = "Chatbot not found. Please refresh.";
+          }
+        } catch (err) {
+          console.error(err);
+          status.innerText = "An error occurred during OCR processing.";
         }
-
-        // Send the extracted blueprint content to the agent
-        window.postMessage({
-          type: "chatbot.sendMessage",
-          payload: `Blueprint content uploaded:\n\n${fullText}`
-        }, "*");
-
-        status.textContent = 'Blueprint uploaded and sent to agent.';
       };
-      reader.readAsArrayBuffer(file);
+
+      reader.readAsDataURL(file);
     }
   </script>
 </body>
